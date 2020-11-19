@@ -54,6 +54,10 @@ int UvFsCheckDir(const char *dir, char *errmsg)
 
 int UvFsSyncDir(const char *dir, char *errmsg)
 {
+    #if defined(_WIN32)
+    // Windows doesn't really support sync on folders.
+    return 0;
+    #endif
     uv_file fd;
     int rv;
     rv = UvOsOpen(dir, UV_FS_O_RDONLY | UV_FS_O_DIRECTORY, 0, &fd);
@@ -205,6 +209,12 @@ int UvFsAllocateFile(const char *dir,
         }
         goto err_after_open;
     }
+    rv = UvOsFsync(*fd);
+    if (rv != 0) {
+        UvOsErrMsg(errmsg, "fsync", rv);
+        goto err_after_open;
+    }
+
 
     return 0;
 
@@ -227,15 +237,27 @@ static int uvFsWriteFile(const char *dir,
     int rv;
     size_t size;
     unsigned i;
+    uv_buf_t convBufArr[n_bufs];
+
     size = 0;
     for (i = 0; i < n_bufs; i++) {
         size += bufs[i].len;
     }
+
+    // casting raft_buffer to uv_buf_t changes the value of the len field.
+    // uv_buf_t for Windows is ULONG, while for linux it's size_t. Copying
+    // the values and explicitly casting len to ULONG seems to work.
+    for (i = 0; i < n_bufs; i++) {
+        convBufArr[i].len = (ULONG)bufs[i].len;
+        convBufArr[i].base = bufs[i].base;
+    }
+
+
     rv = uvFsOpenFile(dir, filename, flags, S_IRUSR | S_IWUSR, &fd, errmsg);
     if (rv != 0) {
         goto err;
     }
-    rv = UvOsWrite(fd, (const uv_buf_t *)bufs, n_bufs, 0);
+    rv = UvOsWrite(fd, convBufArr, n_bufs, 0);
     if (rv != (int)(size)) {
         if (rv < 0) {
             UvOsErrMsg(errmsg, "write", rv);
@@ -297,8 +319,12 @@ open:
         }
         goto err;
     }
-
-    rv = UvOsWrite(fd, (const uv_buf_t *)buf, 1, 0);
+    uv_buf_t convBufArr[1];
+    uv_buf_t convBuf;
+    convBuf.len = (ULONG)buf->len;
+    convBuf.base = buf->base;
+    convBufArr[0] = convBuf;
+    rv = UvOsWrite(fd, convBufArr, 1, 0);
     if (rv != (int)(buf->len)) {
         if (rv < 0) {
             UvOsErrMsg(errmsg, "write", rv);
@@ -357,7 +383,7 @@ int UvFsReadInto(uv_file fd, struct raft_buffer *buf, char *errmsg)
 {
     int rv;
     /* TODO: use uv_fs_read() */
-    rv = (int)read(fd, buf->base, buf->len);
+    rv = read(fd, buf->base, buf->len);
     if (rv == -1) {
         UvOsErrMsg(errmsg, "read", -errno);
         return RAFT_IOERR;
@@ -682,6 +708,10 @@ int UvFsProbeCapabilities(const char *dir,
                           bool *async,
                           char *errmsg)
 {
+#if defined(_WIN32)
+    *direct = 0;
+#endif
+
     int fd; /* File descriptor of the probe file */
     int rv;
     char ignored[RAFT_ERRMSG_BUF_SIZE];
@@ -727,8 +757,10 @@ out:
     close(fd);
     return 0;
 
+#if defined(__linux__)
 err_after_file_open:
     close(fd);
+#endif
 err:
     return rv;
 }

@@ -42,10 +42,21 @@ int UvOsClose(uv_file fd)
 #ifdef _WIN32
 int UvOsFallocate(uv_file fd, off_t offset, off_t len)
 {
-    //TODO: implement functionality
+    // This is not really correct. A better implementation would probably
+    // be to open the file, seek to offset and write zeros.
+    int rv;
+    rv = ftruncate(fd, offset+len);
+    if (rv != 0) {
+      return rv;
+    }
+    rv = UvOsFsync(fd);
+    if (rv != 0) {
+        return rv;
+    }
     return 0;
 }
 #else
+
 /* Emulate fallocate(). Mostly taken from glibc's implementation. */
 static int uvOsFallocateEmulation(int fd, off_t offset, off_t len)
 {
@@ -157,7 +168,11 @@ void UvOsJoin(const char *dir, const char *filename, char *path)
     assert(UV__DIR_HAS_VALID_LEN(dir));
     assert(UV__FILENAME_HAS_VALID_LEN(filename));
     strcpy(path, dir);
+    #ifdef _WIN32
+    strcat(path, "\\");
+    #else
     strcat(path, "/");
+    #endif
     strcat(path, filename);
 }
 

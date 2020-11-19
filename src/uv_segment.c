@@ -171,7 +171,7 @@ static int uvReadSegmentFile(struct uv *uv,
     }
     if (buf->len < 8) {
         ErrMsgPrintf(uv->io->errmsg, "file has only %zu bytes", buf->len);
-        HeapFree(buf->base);
+        MyHeapFree(buf->base);
         return RAFT_IOERR;
     }
     *format = byteFlip64(*(uint64_t *)buf->base);
@@ -242,7 +242,7 @@ static int uvLoadEntriesBatch(struct uv *uv,
         return RAFT_IOERR;
     }
 
-    n = (size_t)byteFlip64(*(uint64_t *)batch);
+    n = (ULONG)byteFlip64(*(uint64_t *)batch);
     if (n == 0) {
         ErrMsgPrintf(uv->io->errmsg, "entries count in preamble is zero");
         rv = RAFT_CORRUPT;
@@ -323,7 +323,7 @@ static int uvLoadEntriesBatch(struct uv *uv,
     return 0;
 
 err_after_header_decode:
-    HeapFree(*entries);
+    MyHeapFree(*entries);
 err:
     *entries = NULL;
     *n_entries = 0;
@@ -438,11 +438,11 @@ err_after_batch_load:
 
 err_after_extend_entries:
     if (*entries != NULL) {
-        HeapFree(*entries);
+        MyHeapFree(*entries);
     }
 
 err_after_read:
-    HeapFree(buf.base);
+    MyHeapFree(buf.base);
 
 err:
     assert(rv != 0);
@@ -520,7 +520,7 @@ static int uvLoadOpenSegment(struct uv *uv,
                  * segment. */
                 tracef("remove zeroed open segment %s", info->filename);
                 remove = true;
-                HeapFree(buf.base);
+                MyHeapFree(buf.base);
                 goto done;
             }
         }
@@ -571,7 +571,7 @@ static int uvLoadOpenSegment(struct uv *uv,
     }
 
     if (n_batches == 0) {
-        HeapFree(buf.base);
+        MyHeapFree(buf.base);
         remove = true;
     }
 
@@ -616,7 +616,7 @@ err_after_batch_load:
     raft_free(tmp_entries);
 
 err_after_read:
-    HeapFree(buf.base);
+    MyHeapFree(buf.base);
 
 err:
     assert(rv != 0);
@@ -658,7 +658,7 @@ static int uvEnsureSegmentBufferIsLargeEnough(struct uvSegmentBuffer *b,
     }
 
     b->arena.base = base;
-    b->arena.len = len;
+    b->arena.len = (ULONG)len;
 
     return 0;
 }
@@ -769,7 +769,7 @@ void uvSegmentBufferFinalize(struct uvSegmentBuffer *b, uv_buf_t *out)
     }
 
     out->base = b->arena.base;
-    out->len = n_blocks * b->block_size;
+    out->len = (ULONG)(n_blocks * b->block_size);
 }
 
 void uvSegmentBufferReset(struct uvSegmentBuffer *b, unsigned retain)
@@ -899,7 +899,6 @@ static int uvWriteClosedSegment(struct uv *uv,
 
     /* Render the path */
     sprintf(filename, UV__CLOSED_TEMPLATE, first_index, last_index);
-
     /* Make sure that the given encoded configuration fits in the first
      * block */
     cap = uv->block_size -

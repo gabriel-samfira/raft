@@ -51,7 +51,7 @@ static int uvTcpDecodePreamble(struct uvTcpHandshake *h)
     if (protocol != UV__TCP_HANDSHAKE_PROTOCOL) {
         return RAFT_MALFORMED;
     }
-    h->address.len = (size_t)byteFlip64(h->preamble[2]);
+    h->address.len = (ULONG)byteFlip64(h->preamble[2]);
     h->address.base = MyHeapMalloc(h->address.len);
     if (h->address.base == NULL) {
         return RAFT_NOMEM;
@@ -96,7 +96,7 @@ static void uvTcpIncomingAllocCbAddress(struct uv_handle_s *handle,
     (void)suggested_size;
     assert(!incoming->t->closing);
     buf->base = incoming->handshake.address.base + incoming->handshake.nread;
-    buf->len = incoming->handshake.address.len - incoming->handshake.nread;
+    buf->len = (ULONG)incoming->handshake.address.len - (ULONG)incoming->handshake.nread;
 }
 
 static void uvTcpIncomingReadCbAddress(uv_stream_t *stream,
@@ -155,7 +155,7 @@ static void uvTcpIncomingAllocCbPreamble(struct uv_handle_s *handle,
     (void)suggested_size;
     buf->base =
         (char *)incoming->handshake.preamble + incoming->handshake.nread;
-    buf->len = sizeof incoming->handshake.preamble - incoming->handshake.nread;
+    buf->len = (ULONG)(sizeof incoming->handshake.preamble - incoming->handshake.nread);
 }
 
 static void uvTcpIncomingReadCbPreamble(uv_stream_t *stream,

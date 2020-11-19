@@ -1,6 +1,5 @@
 #ifndef RAFT_UV_H
 #define RAFT_UV_H
-
 #include <uv.h>
 
 #include "../raft.h"

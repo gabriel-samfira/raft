@@ -227,7 +227,7 @@ static void uvServerReadCb(uv_stream_t *stream,
 
         /* Advance the read window */
         s->buf.base += n;
-        s->buf.len -= n;
+        s->buf.len -= (ULONG)n;
 
         /* If there's more data to read in order to fill the current
          * read buffer, just return, we'll be invoked again. */
@@ -240,7 +240,7 @@ static void uvServerReadCb(uv_stream_t *stream,
              * completed reading the preamble. */
             assert(s->header.base == NULL);
 
-            s->header.len = (size_t)byteFlip64(s->preamble[1]);
+            s->header.len = (ULONG)byteFlip64(s->preamble[1]);
 
             /* The length of the header must be greater than zero. */
             if (s->header.len == 0) {

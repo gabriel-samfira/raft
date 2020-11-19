@@ -1,5 +1,4 @@
 /* Implementation of the @raft_io interface based on libuv. */
-
 #ifndef UV_H_
 #define UV_H_
 

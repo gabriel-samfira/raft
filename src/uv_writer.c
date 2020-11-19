@@ -7,6 +7,17 @@
 #include "assert.h"
 #include "heap.h"
 
+/* Return the total lengths of the given buffers. */
+static size_t lenOfBufs(const uv_buf_t bufs[], unsigned n)
+{
+    size_t len = 0;
+    unsigned i;
+    for (i = 0; i < n; i++) {
+        len += bufs[i].len;
+    }
+    return len;
+}
+
 #if defined(__linux__)
 /* Copy the error message from the request object to the writer object. */
 static void uvWriterReqTransferErrMsg(struct UvWriterReq *req)
@@ -133,6 +144,8 @@ static void uvWriterAfterWorkCb(uv_work_t *work, int status)
     uvWriterReqFinish(req);
 }
 
+
+#if defined(__linux__)
 /* Callback fired when the event fd associated with AIO write requests should be
  * ready for reading (i.e. when a write has completed). */
 static void uvWriterPollCb(uv_poll_t *poller, int status, int events)
@@ -160,7 +173,6 @@ static void uvWriterPollCb(uv_poll_t *poller, int status, int events)
         assert(errno == EAGAIN);
         return;
     }
-
     /* TODO: this assertion fails in unit tests */
     /* assert(completed == 1); */
 
@@ -309,14 +321,34 @@ err:
     assert(rv != 0);
     return rv;
 }
+#else
+int UvWriterInit(struct UvWriter *w,
+                 struct uv_loop_s *loop,
+                 uv_file fd,
+                 bool direct /* Whether to use direct I/O */,
+                 bool async /* Whether async I/O is available */,
+                 unsigned max_concurrent_writes,
+                 char *errmsg)
+{
+    void *data = w->data;
+    int rv = 0;
+    memset(w, 0, sizeof *w);
+    w->data = data;
+    w->loop = loop;
+    w->fd = fd;
+    return rv;
+}
+#endif // defined(__linux__)
 
 static void uvWriterCleanUpAndFireCloseCb(struct UvWriter *w)
 {
     assert(w->closing);
 
     UvOsClose(w->fd);
+#if defined(__linux__)
     MyHeapFree(w->events);
     UvOsIoDestroy(w->ctx);
+#endif
 
     if (w->close_cb != NULL) {
         w->close_cb(w);
@@ -391,17 +423,6 @@ void UvWriterClose(struct UvWriter *w, UvWriterCloseCb cb)
     }
 }
 
-/* Return the total lengths of the given buffers. */
-static size_t lenOfBufs(const uv_buf_t bufs[], unsigned n)
-{
-    size_t len = 0;
-    unsigned i;
-    for (i = 0; i < n; i++) {
-        len += bufs[i].len;
-    }
-    return len;
-}
-
 int UvWriterSubmit(struct UvWriter *w,
                    struct UvWriterReq *req,
                    const uv_buf_t bufs[],
@@ -414,6 +435,7 @@ int UvWriterSubmit(struct UvWriter *w,
     struct iocb *iocbs = &req->iocb;
 #endif /* RWF_NOWAIT */
     assert(!w->closing);
+    assert(w->fd >= 0);
 
     /* TODO: at the moment we are not leveraging the support for concurrent
      *       writes, so ensure that we're getting write requests
@@ -423,7 +445,6 @@ int UvWriterSubmit(struct UvWriter *w,
         assert(QUEUE_IS_EMPTY(&w->work_queue));
     }
 
-    assert(w->fd >= 0);
     assert(w->event_fd >= 0);
     assert(w->ctx != 0);
     assert(req != NULL);
@@ -445,7 +466,6 @@ int UvWriterSubmit(struct UvWriter *w,
     req->iocb.aio_nbytes = n;
     req->iocb.aio_offset = (int64_t)offset;
     *((void **)(&req->iocb.aio_data)) = (void *)req;
-
 #if defined(RWF_HIPRI)
     /* High priority request, if possible */
     /* TODO: do proper kernel feature detection for this one. */
@@ -529,8 +549,8 @@ err:
     assert(rv != 0);
     return rv;
 }
+#else
 
-#else /* fallback */
 int UvWriterInit(struct UvWriter *w,
                  struct uv_loop_s *loop,
                  uv_file fd,
@@ -551,15 +571,41 @@ int UvWriterInit(struct UvWriter *w,
 int UvWriterSubmit(struct UvWriter *w,
                    struct UvWriterReq *req,
                    const uv_buf_t bufs[],
-                   unsigned n,
+                   unsigned int n,
                    size_t offset,
                    UvWriterReqCb cb)
 {
-    return uv_fs_write(w->loop, NULL, w->fd, bufs, n, offset, NULL); //TODO: NULL for request and callback?
+    uv_fs_t write_req;
+
+    assert(!w->closing);
+    assert(w->fd >= 0);
+    req->writer = w;
+    req->len = lenOfBufs(bufs, n);
+    req->status = -1;
+    req->work.data = req;
+    req->cb = cb;
+
+    uv_fs_write(w->loop, &write_req, w->fd, bufs, n, (int64_t)offset, NULL);
+
+    int result = write_req.result;
+    // TODO: should probably check that write_req.result == n?
+    if (result == -1) {
+        req->status = RAFT_IOERR;
+    }else{
+        req->status = 0;
+    }
+
+    cb(req, req->status);
+    return req->status;
 }
 
 void UvWriterClose(struct UvWriter *w, UvWriterCloseCb cb)
 {
+    assert(!w->closing);
+    w->closing = true;
+    w->close_cb = cb;
+
     uv_fs_close(w->loop, NULL, w->fd, NULL); //TODO: NULL for callback and request?
+    cb(w);
 }
-#endif /* linux */
+#endif /* linux */ 

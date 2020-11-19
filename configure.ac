@@ -27,16 +27,7 @@ AM_CONDITIONAL([WINDOWS], [test "x$build_windows" = "xyes"])
 # explicitely disabled.
 AC_ARG_ENABLE(uv, AS_HELP_STRING([--disable-uv], [do not build the libuv-based raft_io implementation]))
 AS_IF([test "x$enable_uv" != "xno"],
-      [
-          AM_COND_IF([WINDOWS], 
-          [
-              UV_LIBS="-L$prefix/lib -luv -lpthread -lws2_32 -lpsapi -liphlpapi -lshell32 -luserenv -luser32 -lmswsock -ladvapi32"
-              UV_CFLAGS="-I$prefix/include"
-              AC_SUBST(UV_LIBS)
-              AC_SUBST(UV_CFLAGS)
-          ],
-          [PKG_CHECK_MODULES(UV, [libuv >= 1.8.0], [have_uv=yes], [have_uv=no])])
-        ],
+      [PKG_CHECK_MODULES(UV, [libuv >= 1.8.0], [have_uv=yes], [have_uv=no])],
       [have_uv=no])
 AS_IF([test "x$enable_uv" = "xyes" -a "x$have_uv" = "xno"], [AC_MSG_ERROR([libuv required but not found])], [])
 AM_CONDITIONAL(UV_ENABLED, test "x$have_uv" = "xyes")
@@ -126,9 +117,14 @@ CC_CHECK_FLAGS_APPEND([AM_CFLAGS],[CFLAGS],[ \
   -Wnested-externs \
   -Wconversion \
 ])
-AS_CASE([$host_os],[mingw*],[CC_CHECK_CFLAGS_APPEND([-D__USE_MINGW_ANSI_STDIO])])
-
 AC_SUBST(AM_CFLAGS)
+
+case $host in
+  *mingw*)
+  # -D__USE_MINGW_ANSI_STDIO is deprecated it seems.
+  CC_CHECK_FLAGS_APPEND([AM_CFLAGS],[CFLAGS],[-D_POSIX])
+  ;;
+esac
 
 AC_CONFIG_FILES([raft.pc Makefile])
 AC_OUTPUT

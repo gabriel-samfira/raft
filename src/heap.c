@@ -47,7 +47,12 @@ static void *defaultAlignedAlloc(void *data, size_t alignment, size_t size)
 static void defaultAlignedFree(void *data, size_t alignment, void *ptr)
 {
     (void)alignment;
+    #if defined(_WIN32)
+    (void)ptr;
+    _aligned_free(data);
+    #else
     defaultFree(data, ptr);
+    #endif
 }
 
 static struct raft_heap defaultHeap = {

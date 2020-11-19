@@ -169,22 +169,22 @@ int uvEncodeMessage(const struct raft_message *message,
     header.len = RAFT_IO_UV__PREAMBLE_SIZE;
     switch (message->type) {
         case RAFT_IO_REQUEST_VOTE:
-            header.len += sizeofRequestVote();
+            header.len += (ULONG)sizeofRequestVote();
             break;
         case RAFT_IO_REQUEST_VOTE_RESULT:
-            header.len += sizeofRequestVoteResult();
+            header.len += (ULONG)sizeofRequestVoteResult();
             break;
         case RAFT_IO_APPEND_ENTRIES:
-            header.len += sizeofAppendEntries(&message->append_entries);
+            header.len += (ULONG)sizeofAppendEntries(&message->append_entries);
             break;
         case RAFT_IO_APPEND_ENTRIES_RESULT:
-            header.len += sizeofAppendEntriesResult();
+            header.len += (ULONG)sizeofAppendEntriesResult();
             break;
         case RAFT_IO_INSTALL_SNAPSHOT:
-            header.len += sizeofInstallSnapshot(&message->install_snapshot);
+            header.len += (ULONG)sizeofInstallSnapshot(&message->install_snapshot);
             break;
         case RAFT_IO_TIMEOUT_NOW:
-            header.len += sizeofTimeoutNow();
+            header.len += (ULONG)sizeofTimeoutNow();
             break;
         default:
             return RAFT_MALFORMED;
@@ -248,13 +248,13 @@ int uvEncodeMessage(const struct raft_message *message,
             const struct raft_entry *entry =
                 &message->append_entries.entries[i];
             (*bufs)[i + 1].base = entry->buf.base;
-            (*bufs)[i + 1].len = entry->buf.len;
+            (*bufs)[i + 1].len = (ULONG)entry->buf.len;
         }
     }
 
     if (message->type == RAFT_IO_INSTALL_SNAPSHOT) {
         (*bufs)[1].base = message->install_snapshot.data.base;
-        (*bufs)[1].len = message->install_snapshot.data.len;
+        (*bufs)[1].len = (ULONG)message->install_snapshot.data.len;
     }
 
     return 0;
@@ -455,7 +455,7 @@ static void decodeTimeoutNow(const uv_buf_t *buf, struct raft_timeout_now *p)
 int uvDecodeMessage(const unsigned long type,
                     const uv_buf_t *header,
                     struct raft_message *message,
-                    size_t *payload_len)
+                    ULONG *payload_len)
 {
     unsigned i;
     int rv = 0;
@@ -476,7 +476,7 @@ int uvDecodeMessage(const unsigned long type,
         case RAFT_IO_APPEND_ENTRIES:
             rv = decodeAppendEntries(header, &message->append_entries);
             for (i = 0; i < message->append_entries.n_entries; i++) {
-                *payload_len += message->append_entries.entries[i].buf.len;
+                *payload_len += (ULONG)message->append_entries.entries[i].buf.len;
             }
             break;
         case RAFT_IO_APPEND_ENTRIES_RESULT:
@@ -484,7 +484,7 @@ int uvDecodeMessage(const unsigned long type,
             break;
         case RAFT_IO_INSTALL_SNAPSHOT:
             rv = decodeInstallSnapshot(header, &message->install_snapshot);
-            *payload_len += message->install_snapshot.data.len;
+            *payload_len += (ULONG)message->install_snapshot.data.len;
             break;
         case RAFT_IO_TIMEOUT_NOW:
             decodeTimeoutNow(header, &message->timeout_now);

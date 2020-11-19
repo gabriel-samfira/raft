@@ -1,5 +1,4 @@
 /* Utilities around error handling. */
-
 #ifndef ERROR_H_
 #define ERROR_H_
 

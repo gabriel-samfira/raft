@@ -43,7 +43,7 @@ static int uvTcpEncodeHandshake(raft_id id, const char *address, uv_buf_t *buf)
     buf->len = sizeof(uint64_t) + /* Protocol version. */
                sizeof(uint64_t) + /* Server ID. */
                sizeof(uint64_t) /* Size of the address buffer */;
-    buf->len += address_len;
+    buf->len += (ULONG)address_len;
     buf->base = MyHeapMalloc(buf->len);
     if (buf->base == NULL) {
         return RAFT_NOMEM;
