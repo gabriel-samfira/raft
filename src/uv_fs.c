@@ -2,7 +2,9 @@
 
 #include <stdlib.h>
 #include <string.h>
+#if defined(__linux__)
 #include <sys/vfs.h>
+#endif
 #include <unistd.h>
 
 #include "assert.h"
@@ -178,7 +180,9 @@ int UvFsAllocateFile(const char *dir,
     UvOsJoin(dir, filename, path);
 
     /* TODO: use RWF_DSYNC instead, if available. */
-    flags |= O_DSYNC;
+#if defined(UV_FS_O_DSYNC)
+    flags |= UV_FS_O_DSYNC;
+#endif
 
     rv = uvFsOpenFile(dir, filename, flags, S_IRUSR | S_IWUSR, fd, errmsg);
     if (rv != 0) {
@@ -392,7 +396,7 @@ int UvFsReadFile(const char *dir,
     }
 
     buf->len = (size_t)sb.st_size;
-    buf->base = HeapMalloc(buf->len);
+    buf->base = MyHeapMalloc(buf->len);
     if (buf->base == NULL) {
         ErrMsgOom(errmsg);
         rv = RAFT_NOMEM;
@@ -409,7 +413,7 @@ int UvFsReadFile(const char *dir,
     return 0;
 
 err_after_buf_alloc:
-    HeapFree(buf->base);
+    MyHeapFree(buf->base);
 err_after_open:
     UvOsClose(fd);
 err:
@@ -506,6 +510,7 @@ err:
     return RAFT_IOERR;
 }
 
+#if defined(__linux__)
 /* Check if direct I/O is possible on the given fd. */
 static int probeDirectIO(int fd, size_t *size, char *errmsg)
 {
@@ -584,6 +589,7 @@ static int probeDirectIO(int fd, size_t *size, char *errmsg)
     *size = 0;
     return 0;
 }
+#endif
 
 #if defined(RWF_NOWAIT)
 /* Check if fully non-blocking async I/O is possible on the given fd. */
@@ -690,11 +696,13 @@ int UvFsProbeCapabilities(const char *dir,
     }
     UvFsRemoveFile(dir, UV__FS_PROBE_FILE, ignored);
 
+#if defined(__linux__)
     /* Check if we can use direct I/O. */
     rv = probeDirectIO(fd, direct, errmsg);
     if (rv != 0) {
         goto err_after_file_open;
     }
+#endif
 
 #if !defined(RWF_NOWAIT)
     /* We can't have fully async I/O, since io_submit might potentially block.
